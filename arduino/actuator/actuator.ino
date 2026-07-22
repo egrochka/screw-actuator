@@ -26,53 +26,80 @@
 // Define other variables
 int load_min = 0;
 int load_max = 8000;
-bool state = 0;  // 0 - STOP, 1-RUN
 float pos_home;
-int weight_cal = 109;  //1000;  // Calibration load weight in grams
-int lcd_rows = 4;
-int lcd_char = 20;
+int weight_cal = 109;  // Calibration load weight in grams
 
 // Various speeds
 int speed_min = 0;
-int speed_max = 8000;
+int speed_max = 5000;
 int speed_main = 0;
-int speed_return = 3000;
+int speed_return = -3000;
 
 // Create objects from libraries
 AccelStepper stepper;
 HX711 cell;
 LiquidCrystal lcd(PIN_DISP_RS, PIN_DISP_EN, PIN_DISP_DT4, PIN_DISP_DT5, PIN_DISP_DT6, PIN_DISP_DT7);
 
-class Screen {
-  // Show information on the 4x20 display
+// CLASSES ------------------------------------------------------------------------
+
+class Page {
 
 private:
-  int _pin_dt;
-  int _pin_clk;
-  int _rows;
-  int _chars;
-  String _mode;
 
-  void deletefrom(String msg, int row) {
-    int len = msg.length();
+  static int const _chars = 20;
+  static int const _rows = 4;
+  String _name;
+  float _nums[_rows];
+  String _msgs[_rows];
+
+  void deletefrom(int row, int pos) {
     int chars_max = _chars;
     if (row >= 2) {
-      len += 16;
+      pos += 16;
       chars_max += 16;
     }
-    for (int i = len; i < chars_max; i++) {
+    for (int i = pos; i < chars_max; i++) {
       lcd.setCursor(i, row);
       lcd.print(" ");
     }
   }
 
-public:
-  Screen() {}  //DO NOT USE
+  void drawLine(int pos = 0, int row = 0, String line = "") {
+    if (row >= 2) {
+      pos += 16;
+    }
+    //deletefrom(row, pos); // Maybe replace with deletefrom later
+    lcd.setCursor(pos, row);
+    lcd.print("                    ");
+    lcd.setCursor(pos, row);
+    lcd.print(line);
+  }
 
-  Screen(int pin_dt, int pin_clk, int rows, int chars) {
-    _rows = rows;
-    _chars = chars;
-    _mode = "NONE";
+public:
+
+  Page() {}  // DO NOT USE
+
+  Page(String name,
+       String msg0 = "",
+       String msg1 = "",
+       String msg2 = "",
+       String msg3 = "",
+       float num0 = NAN,
+       float num1 = NAN,
+       float num2 = NAN,
+       float num3 = NAN) {
+
+    _name = name;
+
+    _nums[0] = num0;
+    _nums[1] = num1;
+    _nums[2] = num2;
+    _nums[3] = num3;
+
+    _msgs[0] = msg0;
+    _msgs[1] = msg1;
+    _msgs[2] = msg2;
+    _msgs[3] = msg3;
   }
 
   void begin() {
@@ -81,68 +108,74 @@ public:
     lcd.clear();
   }
 
-  void show(String mode, int num1 = 0, int num2 = 0) {
-    if (mode == "REF") {  //REFERENCE MODE
-      if (_mode != mode) {
-        lcd.setCursor(0, 0);
-        lcd.print("                    ");
-        lcd.setCursor(0, 0);
-        lcd.print("Reference mode");
-      }
-
-      String msg = "Reference: ";
-
-      deletefrom(msg, 1);
-      lcd.setCursor(0, 1);
-      lcd.print(msg + String(num1));
-
-    } else if (mode == "READ") {  //READING MODE
-      if (_mode != mode) {
-        lcd.setCursor(0, 0);
-        lcd.print("                    ");
-        lcd.setCursor(0, 0);
-        lcd.print("Reading mode");
-      }
-
-      String msg1 = "Reading: ";
-      deletefrom(msg1, 2);
-      lcd.setCursor(16, 2);
-      lcd.print(msg1 + String(num1));
-
-      String msg2 = "Current speed: ";
-      deletefrom(msg2, 3);
-      lcd.setCursor(16, 3);
-      lcd.print(msg2 + String(num2));
-
-    } else if (mode == "CAL") {  //CALIBRATION MODE
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print("Calibration mode");
-      lcd.setCursor(0, 1);
-
-      switch (int(num1)) {
-        case 0:
-          lcd.print("                    ");
-          lcd.setCursor(0, 1);
-          lcd.print("Tare");
-          break;
-
-        case 1:
-          lcd.print("                    ");
-          lcd.setCursor(0, 1);
-          lcd.print("Hang weight");
-          break;
-
-        case 2:
-          lcd.print("                    ");
-          lcd.setCursor(0, 1);
-          lcd.print("Done!");
-          break;
+  void pageDraw() {
+    for (int i = 0; i < _rows; i++) {
+      if (_nums[i] != _nums[i]) {
+        drawLine(0, i, _msgs[i]);
+      } else {
+        drawLine(0, i, _msgs[i] + String(_nums[i]));
       }
     }
-    _mode = mode;
+  }
+
+  // void pageUpdate() {
+  //   for (int i = 0; i < _rows; i++) {
+  //     if (!(_nums[i] != _nums[i])) {
+  //       int len = _msgs[i].length();
+  //       drawLine(len, i, String(_nums[i]));
+  //     }
+  //   }
+  // }
+  // FINISH LATER
+
+  String getName() {
+    return _name;
+  }
+  String getMsg(int num) {
+    return _msgs[num];
+  }
+  void editName(String edit) {
+    _name = edit;
+  }
+  void editMsg(int num, String edit) {
+    _msgs[num] = edit;
+  }
+  void editNum(int num, float edit) {
+    _nums[num] = edit;
   }
 };
+
+Page refPage("Reference mode",
+             "---REFERENCE MODE---",
+             "Reference: ",
+             "",
+             "");
+
+Page runPage("Run mode",
+             "------RUN MODE------",
+             "Reference: ",
+             "Reading: ",
+             "Motor speed: ");
+
+Page conPage("Confirmation page",
+             "Confirm start?",
+             "",
+             "",
+             "");
+
+Page calPage("Calibration page",
+             "--CALIBRATION MODE--",
+             "",
+             "",
+             "");
+
+Page menPage("Menu page",
+             refPage.getName(),
+             runPage.getName(),
+             calPage.getName());
+
+int const entrys_num = 3;
+Page entrys[entrys_num] = { refPage, runPage, calPage };
 
 class LED {
 
@@ -162,67 +195,20 @@ public:
     digitalWrite(_pin, LOW);
   }
 };
-class Switch {
 
-private:
-  int _pin;
-  bool _state;
-  bool _stateOLD;
-
-public:
-  Switch(){};  //DO NOT USE
-
-  Switch(int pin) {
-    _pin = pin;
-  }
-  bool read() {
-    bool temp = digitalRead(_pin);
-    return temp;
-  }
-  bool ispressed() {
-    _stateOLD = _state;
-    _state = read();
-    if (_stateOLD && !_state) {
-      delay(10);
-      return true;
-    } else {
-      delay(10);
-      return false;
-    }
-  }
-};
-
-class MenuEntry {
-
-public:
-  int _number;
-  String _name;
-  String _msg;
-
-  MenuEntry() {}  // DO NOT USE
-
-  MenuEntry(int number, String name) {
-    _number = number;
-    _name = name;
-  }
-
-  String name() {
-    return _name;
-  }
-};
 
 class Controller {
   // Controller parameters
 
 private:
-  float Kp = 35;
+  float Kp = 10;
   float Ki = 0;
-  float Kd = 1.0;  // 0.25;
+  float Kd = 1;//1.0;
   float integral = 0;
 
 public:
 
-  int _update_time = 45;
+  int _update_time = 50;
 
   Controller() {}
 
@@ -232,7 +218,7 @@ public:
     float P = Kp * err;
 
     integral += err * dt;
-    float I = Ki * constrain(integral, load_min, load_max);
+    float I = Ki * integral;  // constrain(integral, load_min, load_max);
 
     int dErr = (load_in - load_old) / dt;
     float D = Kd * dErr;
@@ -242,7 +228,7 @@ public:
     int speed = map(C, load_min, load_ref, speed_min, speed_max);
 
     //Serial.println("P: " + String(P) + " I: " + String(I) + " D: " + String(D) + " C: " + String(C) + " Speed: " + String(speed));
-    //Serial.println(String(load_in) + " " + String(millis()) + " " + String(load_ref) + " " + String(speed));
+    Serial.println(String(load_in) + " " + String(millis()) + " " + String(load_ref) + " " + String(speed));
     return speed;
   }
 
@@ -252,58 +238,39 @@ public:
 };
 
 // Create objects from classes
-Screen screen(PIN_DT, PIN_SCK, lcd_rows, lcd_char);
 Controller controller;
 LED LED1(PIN_LED1);
-Switch switch1(PIN_SWITCH);
 
-float calibrate() {
-  // Calibrate loadcell before use
+// FUNCTIONS ------------------------------------------------------------------------
 
-  screen.show("CAL", 0);
-  cell.tare(20);
-  float offset = cell.get_offset();
-
-  Serial.println("Press");
-
-  screen.show("CAL", 1);
-  while (!switch1.ispressed())
-    ;
-  cell.calibrate_scale(weight_cal, 5);
-
-  Serial.println("OK");
-
-  screen.show("CAL", 2);
-  return offset;
-}
-
-float offset;
-
-bool stop = false;
+bool pressed = false;
 void interruptStop() {
-  stop = true;
+  pressed = true;
   delay(300);
 }
 
-void setup() {
+void calibrate() {
+  // Calibrate loadcell before use
 
-  Serial.begin(9600);
-  screen.begin();
+  calPage.editMsg(1, "Taring...");
+  calPage.pageDraw();
+  cell.tare(20);
+  float offset = cell.get_offset();
 
-  // Stepper setup
-  stepper.setMaxSpeed(speed_max);
-  pos_home = stepper.currentPosition();
+  calPage.editMsg(1, "Hang cal. weight");
+  calPage.pageDraw();
 
-  // PinModes for non-library used pins
-  pinMode(PIN_POT, INPUT);
-  pinMode(PIN_SWITCH, INPUT);
-  pinMode(PIN_LED1, OUTPUT);
+  while (!pressed) delay(10);
+  pressed = false;
+  cell.calibrate_scale(weight_cal, 5);
 
-  // Loadcell setup
-  cell.begin(PIN_DT, PIN_CLK);
-  offset = calibrate();
+  calPage.editMsg(1, "Done!");
+  calPage.editMsg(2, "Cal. scale: ");
+  calPage.editNum(2, cell.get_scale());
+  calPage.pageDraw();
 
-  attachInterrupt(digitalPinToInterrupt(PIN_SWITCH), interruptStop, FALLING);
+  delay(1000);
+  return;
 }
 
 // Variables stored between loops
@@ -316,7 +283,7 @@ void runMode() {
 
   int timing = 0;
 
-  LED1.off();
+  LED1.on();
 
   while (true) {
 
@@ -332,37 +299,38 @@ void runMode() {
       float load_old = load_in;
       load_in = cell.get_units();
       speed_main = controller.PID(load_ref, load_in, load_old, dt);
-
       stepper.setSpeed(speed_main);
 
-      screen.show("READ", load_in, speed_main);
+      //runPage.editNum(1, load_ref);
+      //runPage.editNum(2, load_in);
+      //runPage.editNum(3, speed_main);
+      //runPage.pageDraw();
 
       timing = 0;
     }
 
     stepper.runSpeed();
 
-    if (stop) break;
+    if (pressed) {
+      pressed = false;
+
+      stepper.setSpeed(speed_return);
+      while (stepper.currentPosition() < pos_home) {
+        stepper.runSpeed();
+      }
+
+      LED1.off();
+      return;
+    }
   }
 }
 
 void refMode() {
 
   int timing = 0;
-
-  LED1.on();
   controller.reset();
 
-  speed_main = speed_min;
-  stepper.moveTo(pos_home);
-  stepper.setSpeed(speed_return);
-
   while (true) {
-
-    Serial.println(String(pos_home) + " dsdsad " + String(stepper.currentPosition()));
-    stepper.moveTo(pos_home);
-    stepper.runSpeed();
-
     long time_old = time_current;
     time_current = millis();
     long dt = time_current - time_old;
@@ -371,32 +339,69 @@ void refMode() {
     load_ref = (analogRead(PIN_POT) / 1023.0) * load_max;
 
     if (timing >= 100) {
-      screen.show("REF", load_ref);
+      refPage.editNum(1, load_ref);
+      refPage.pageDraw();
+
       timing = 0;
     }
 
-    if (stop) break;
+    if (pressed) {
+      pressed = false;
+      return;
+    }
   }
 }
 
+// MAIN --------------------------------------------------------------------------------
+
+void setup() {
+
+  Serial.begin(9600);
+  menPage.begin();
+
+  // Stepper setup
+  stepper.setMaxSpeed(speed_max);
+  pos_home = stepper.currentPosition();
+
+  // PinModes for non-library used pins
+  pinMode(PIN_POT, INPUT);
+  pinMode(PIN_SWITCH, INPUT);
+  pinMode(PIN_LED1, OUTPUT);
+
+  // Loadcell setup
+  cell.begin(PIN_DT, PIN_CLK);
+
+  attachInterrupt(digitalPinToInterrupt(PIN_SWITCH), interruptStop, FALLING);
+}
+
+int selection = NAN;
 void loop() {
 
-  stop = false;
+  int selection_old = selection;
+  selection = (analogRead(A0) / 1023.0) * (entrys_num);
 
-  switch (state) {
+  if (selection_old != selection) {
+    menPage.editMsg(selection, "> " + entrys[selection].getName());
+    menPage.pageDraw();
+    menPage.editMsg(selection, entrys[selection].getName());
+  }
 
-    case 0:
-      // User can input load on potentiometer
+  if (pressed) {
+    entrys[selection].pageDraw();
+    pressed = false;
 
+    if (entrys[selection].getName() == refPage.getName()) {
       refMode();
-      state = 1;
-      break;
-
-    case 1:
-      // Actuator is run towards the reference load
-
+      delay(100);
+      selection = NAN;
+    } else if (entrys[selection].getName() == runPage.getName()) {
       runMode();
-      state = 0;
-      break;
+      delay(100);
+      selection = NAN;
+    } else if (entrys[selection].getName() == calPage.getName()) {
+      calibrate();
+      delay(100);
+      selection = NAN;
+    }
   }
 }
